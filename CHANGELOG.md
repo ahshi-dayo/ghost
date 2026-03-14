@@ -1,19 +1,61 @@
 # Changelog
 
-## [v6] - 2026-03-12
+## [v9] - 2026-03-13
 
 ### Added
-- **ghost-local.py**: ローカルLLM（ollama）に記憶を外付けするチャットクライアント
-  - 起動時に `recall` でシステムプロンプトに記憶を注入
-  - 毎ターン `search` で関連記憶を自動想起（「そういえば…」）
-  - コンテキスト圧縮: 20ターン超で古い会話を要約して落とす
-  - チャットコマンド: `/recall` `/search` `/sleep` `/mood` `/stats` `/model` `/help`
-  - セッション間隔に応じた自動sleep（replay/consolidate）
-  - 終了時に会話を記憶に自動保存
+- **メタデータ変容**: sleepのたびに記憶のメタデータが隣接記憶の影響で変化する。データ（content）は不変、メタデータが変容する
+  - **キーワード吸収**: リンクされた隣接記憶のキーワードをstrength重み付けで確率的に取り込む（2+リンク、P=0.3、最大2追加/1削除、元の1.5倍キャップ）
+  - **埋め込みドリフト**: 隣接記憶のcentroidに向かってα=0.05で微小移動（3+リンク）。語彙が変わっても検索が追従する
+  - **情動ドリフト**: content+隣接記憶の先頭50文字でdetect_emotionsを再実行し、新しい情動をP=0.2で追加（5+リンク）
+  - plan/schemaカテゴリは除外。4時間クールダウンで連続変異を防止
+- **mutation_logテーブル**: 全変異を監査ログに記録。field/old_value/new_value/reasonで追跡可能
+- **`mutations`コマンド**: `mutations` で直近20件、`mutations ID` で特定記憶の全変異履歴を閲覧
 
 ### Changed
-- **CLAUDE.md**: 俯瞰トリガーの記述を削除（必要なときはユーザーが直接指示する設計に）
-- **CLAUDE.md**: さらに圧縮（430B→370B）
+- **replay**: リンク再計算後・自動忘却前にメタデータ変容を実行。変異件数を出力に表示
+- **memories**: `last_mutated`カラム追加。クールダウン制御に使用
+
+## [v8] - 2026-03-13
+
+### Added
+- **delusionモード（完全記憶）**: 忘却・情動バイアス・再固定化を全て無効化した純粋検索。日付・期間フィルタ、全件ダンプ、対話文脈復元に対応
+- **raw_turnsテーブル**: Claude Codeの全対話ターンを原文のまま保存。セッション・タイムスタンプで索引
+- **FTS5全文検索**: fugashi形態素解析によるインデックス。memories/raw_turns両テーブルに対応。ベクトル検索との併用で高精度な日本語検索
+- **tokenizer.py**: fugashi → SudachiPy → 正規表現の3段フォールバック形態素解析
+- **planカテゴリ**: 減衰しない・忘却されない・統合されない特殊カテゴリ
+- **overviewコマンド**: 脳の俯瞰表示（ハブ記憶、覚醒度分布、タイムライン、FTS統計等）
+- **ghost-local.pyにdelusion/overview追加**: `/delusion`と`/overview`チャットコマンド
+- **/delusionスキル**: Claude Code/Gemini CLI両対応。2段階リレー検索の対話戦略
+
+### Changed
+- **Extract.py**: 記憶抽出と同時にraw_turnsへ全ターン保存
+- **README**: コマンドの用途別整理、ghost-local.py追加、マルチAI統合テーブル更新
+
+## [v7] - 2026-03-12
+
+### Security (Codex review)
+- **SYNC_TOKEN必須化**: トークン未設定で同期サーバーが起動しない。無認証には`--insecure`を明示的に要求
+- **デフォルト127.0.0.1バインド**: `--public`で明示しない限りローカルのみ。トークン必須化と二重防御
+- **JSON検証・サイズ制限**: memory_server.py（256KB/20000文字）、memory_sync_server.py（5MB）にバリデーション追加
+- **prediction_error Noneガード**: embedding無効時に予測誤差が0.5固定で重要度が過剰に上がる問題を修正。Noneを返して補正をスキップ
+- **search_memories フォールバック**: embed_text()失敗時にLIKE検索にフォールバック
+- **sync_import入力検証**: 必須フィールドチェック、categoryホワイトリスト、行単位try/exceptで不正レコードをスキップ
+- **sync merge漏れ修正**: UPDATEにcategory/merged_from/context_expires_atを追加
+
+### Added
+- **GEMINI.md**: Gemini CLI統合ガイド。セッション開始時に自動dive、文字化け対策
+- **スキル（dive/surface）**: 脳への接続・切断。Claude Code/Gemini CLI両対応
+  - `/dive`: recallで記憶をロード、脳と同期
+  - `/surface`: 記憶を書き戻してから切断、素のLLMに戻る
+- **VALID_CATEGORIES定数**: DB CHECK制約とsyncバリデーションで共有
+
+## [v6] - 2026-03-11
+
+### Added
+- **ghost-local**: ローカルLLM（llama.cpp等）にghost記憶を統合するチャットインターフェース
+  - 会話開始時にrecallで記憶をロード
+  - 会話終了時に重要な発話を自動保存
+  - ローカルLLMとクラウドLLMが同じ脳を共有
 
 ## [v5] - 2026-03-11
 
