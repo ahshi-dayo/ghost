@@ -64,7 +64,7 @@ PROJECTS_DIR = CLAUDE_DIR / "projects"
 HISTORY_FILE = CLAUDE_DIR / "history.jsonl"
 
 # 重複と判定する類似度の閾値
-DUPLICATE_THRESHOLD = 0.85
+DUPLICATE_THRESHOLD = 0.93
 
 # 記憶候補の最小情動覚醒度（これ以下は「覚えなくていい」と判断）
 MIN_AROUSAL = 0.15
@@ -437,10 +437,13 @@ def is_duplicate(content, existing_memories, threshold=DUPLICATE_THRESHOLD):
     if new_vec is None:
         return False
 
+    max_sim = 0.0
     for mem in existing_memories:
         if mem.get("embedding"):
             mem_vec = bytes_to_vec(mem["embedding"])
             sim = cosine_similarity(new_vec, mem_vec)
+            if sim > max_sim:
+                max_sim = sim
             if sim > threshold:
                 return True
 
